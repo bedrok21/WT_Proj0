@@ -14,11 +14,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class Task(BaseModel):
-    title: str
-    done: bool = False
-
-tasks = []
 
 templates = Jinja2Templates(directory='.')
 @app.get("/")

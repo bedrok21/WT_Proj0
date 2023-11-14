@@ -1,6 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Todo List</title>
     <style>
         body {
@@ -80,7 +82,6 @@
             font-size: 12px;
         }
 
-
         .delete-button:hover {
             background-color: darkred;
         }
@@ -98,74 +99,73 @@
     </ul>
 
     <script>
-        const sharedData = {
-            tasks: JSON.parse(localStorage.getItem('tasks')) || [],
-        };
+        const socket = new WebSocket('ws://localhost:8000/ws');
 
-        function updateTaskList() {
-            const todoList = document.getElementById('todo-list');
-            todoList.innerHTML = '';
-
-            sharedData.tasks.forEach((task, index) => {
-                const li = document.createElement('li');
-                li.classList.add('todo-item');
-                if (task.completed) {
-                    li.classList.add('completed');
-                }
-                li.draggable = true;
-                li.dataset.index = index;
-
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.checked = task.completed;
-                checkbox.addEventListener('change', () => toggleTaskComplete(index));
-
-                const text = document.createElement('span');
-                text.textContent = task.text;
-
-                const deleteButton = document.createElement('span');
-                deleteButton.classList.add('delete-button');
-                deleteButton.textContent = 'Delete';
-                deleteButton.addEventListener('click', () => deleteTask(index));
-
-                li.appendChild(checkbox);
-                li.appendChild(text);
-                li.appendChild(deleteButton);
-
-                todoList.appendChild(li);
-            });
-
-            const items = document.querySelectorAll('.todo-item');
-            items.forEach(item => {
-                item.addEventListener('dragstart', handleDragStart);
-                item.addEventListener('dragover', handleDragOver);
-                item.addEventListener('drop', handleDrop);
-            });
+        function sendMessage(message) {
+            socket.send(JSON.stringify(message));
         }
+
+        socket.addEventListener('message', (event) => {
+            const data = JSON.parse(event.data);
+            const todoList = document.getElementById('todo-list');
+
+            if (data.type === 'update') {
+                todoList.innerHTML = '';
+
+                data.data.forEach((task, index) => {
+                    const li = document.createElement('li');
+                    li.classList.add('todo-item');
+                    if (task.completed) {
+                        li.classList.add('completed');
+                    }
+                    li.draggable = true;
+                    li.dataset.index = index;
+
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.checked = task.completed;
+                    checkbox.addEventListener('change', () => toggleTaskComplete(index));
+
+                    const text = document.createElement('span');
+                    text.textContent = task.text;
+
+                    const deleteButton = document.createElement('span');
+                    deleteButton.classList.add('delete-button');
+                    deleteButton.textContent = 'Delete';
+                    deleteButton.addEventListener('click', () => deleteTask(index));
+
+                    li.appendChild(checkbox);
+                    li.appendChild(text);
+                    li.appendChild(deleteButton);
+
+                    todoList.appendChild(li);
+                });
+
+                const items = document.querySelectorAll('.todo-item');
+                items.forEach(item => {
+                    item.addEventListener('dragstart', handleDragStart);
+                    item.addEventListener('dragover', handleDragOver);
+                    item.addEventListener('drop', handleDrop);
+                });
+            }
+        });
 
         function addTask() {
             const input = document.getElementById('todo-input');
             const taskText = input.value.trim();
             if (taskText === '') return;
 
-            sharedData.tasks.push({ text: taskText, completed: false });
-
-            localStorage.setItem('tasks', JSON.stringify(sharedData.tasks));
+            sendMessage({ type: 'add', text: taskText });
 
             input.value = '';
-            updateTaskList();
         }
 
         function toggleTaskComplete(index) {
-            sharedData.tasks[index].completed = !sharedData.tasks[index].completed;
-            localStorage.setItem('tasks', JSON.stringify(sharedData.tasks));
-            updateTaskList();
+            sendMessage({ type: 'toggle', index: index });
         }
 
         function deleteTask(index) {
-            sharedData.tasks.splice(index, 1);
-            localStorage.setItem('tasks', JSON.stringify(sharedData.tasks));
-            updateTaskList();
+            sendMessage({ type: 'delete', index: index });
         }
 
         let dragItem = null;
@@ -179,26 +179,28 @@
         }
 
         function handleDrop(e) {
-            const fromIndex = parseInt(dragItem.dataset.index);
-            const toIndex = parseInt(e.target.dataset.index);
-            if (fromIndex !== toIndex) {
-                const [movedItem] = sharedData.tasks.splice(fromIndex, 1);
-                sharedData.tasks.splice(toIndex, 0, movedItem);
-                localStorage.setItem('tasks', JSON.stringify(sharedData.tasks));
-                updateTaskList();
+            e.preventDefault();
+
+            // Find the closest parent with the dataset.index attribute
+            let target = e.target;
+            while (!target.dataset.index && target.parentNode) {
+                target = target.parentNode;
+            }
+
+            // Check if a valid dataset.index is found
+            if (target.dataset.index) {
+                const fromIndex = parseInt(dragItem.dataset.index);
+                const toIndex = parseInt(target.dataset.index);
+                if (!isNaN(fromIndex) && !isNaN(toIndex) && fromIndex !== toIndex) {
+                    sendMessage({ type: 'move', fromIndex: fromIndex, toIndex: toIndex });
+                }
             }
         }
 
         document.getElementById('add-button').addEventListener('click', addTask);
 
-        window.addEventListener('storage', (event) => {
-            if (event.key === 'tasks') {
-                sharedData.tasks = JSON.parse(event.newValue);
-                updateTaskList();
-            }
-        });
 
-        updateTaskList();
+
     </script>
 </body>
 </html>
